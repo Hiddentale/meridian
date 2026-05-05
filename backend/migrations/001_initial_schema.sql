@@ -1,7 +1,4 @@
--- Jumbo product catalogue schema, authoritative target state.
--- This file reflects the schema AFTER all migrations have been applied.
--- Update it whenever a new migration is added.
--- New databases should be brought up via the migration runner, not this file directly.
+-- Milestone 1: Initial product catalogue schema
 
 CREATE TABLE IF NOT EXISTS products (
     sku                     TEXT PRIMARY KEY,
@@ -25,23 +22,19 @@ CREATE TABLE IF NOT EXISTS products (
     nutri_score             TEXT,
 
     -- Derived bio/organic flag: 1 if title/ingredients indicate biological origin
-    is_bio                  INTEGER NOT NULL DEFAULT 0 CHECK (is_bio IN (0, 1)),
+    is_bio                  INTEGER NOT NULL DEFAULT 0,
 
     -- Derived nightshade flag: 1 if ingredient scan finds nightshade content
-    has_nightshade          INTEGER NOT NULL DEFAULT 0 CHECK (has_nightshade IN (0, 1)),
-
-    -- Derived Clean 15 flag: 1 if title matches a low-pesticide produce item
-    -- (EWG Clean 15 list, conventional acceptable for these items)
-    is_clean_15             INTEGER NOT NULL DEFAULT 0 CHECK (is_clean_15 IN (0, 1)),
+    has_nightshade          INTEGER NOT NULL DEFAULT 0,
 
     -- Availability and assortment
-    is_available            INTEGER NOT NULL DEFAULT 0 CHECK (is_available IN (0, 1)),
-    in_assortment           INTEGER NOT NULL DEFAULT 0 CHECK (in_assortment IN (0, 1)),
+    is_available            INTEGER NOT NULL DEFAULT 0,
+    in_assortment           INTEGER NOT NULL DEFAULT 0,
 
     -- Pricing in euro cents (integer)
-    price_cents             INTEGER CHECK (price_cents IS NULL OR price_cents >= 0),
-    promo_price_cents       INTEGER CHECK (promo_price_cents IS NULL OR promo_price_cents >= 0),
-    price_per_unit_cents    INTEGER CHECK (price_per_unit_cents IS NULL OR price_per_unit_cents >= 0),
+    price_cents             INTEGER,
+    promo_price_cents       INTEGER,
+    price_per_unit_cents    INTEGER,
     price_per_unit_unit     TEXT,
 
     -- Parsed nutritional values per 100g/100ml (NULL if absent or unparseable)
@@ -54,7 +47,6 @@ CREATE TABLE IF NOT EXISTS products (
     salt_g                  REAL,
 
     -- Full nutritional table stored as JSON for reference
-    -- {"columns": [...], "rows": [[...], ...]}
     nutritions_raw          TEXT,
 
     -- Product categories as JSON array of {name, path, id}
@@ -64,8 +56,8 @@ CREATE TABLE IF NOT EXISTS products (
     badges                  TEXT NOT NULL DEFAULT '[]',
 
     -- Product flags
-    is_medicine             INTEGER NOT NULL DEFAULT 0 CHECK (is_medicine IN (0, 1)),
-    retail_set              INTEGER NOT NULL DEFAULT 0 CHECK (retail_set IN (0, 1)),
+    is_medicine             INTEGER NOT NULL DEFAULT 0,
+    retail_set              INTEGER NOT NULL DEFAULT 0,
 
     -- Image URL
     image_url               TEXT,
@@ -74,21 +66,12 @@ CREATE TABLE IF NOT EXISTS products (
     last_updated            TEXT NOT NULL
 );
 
--- EWG Clean 15 reference list: produce with negligible pesticide residues
--- Conventional (non-bio) products matching these items are safe to include
-CREATE TABLE IF NOT EXISTS clean_15 (
-    id      INTEGER PRIMARY KEY AUTOINCREMENT,
-    name    TEXT NOT NULL UNIQUE,   -- canonical Dutch name
-    name_en TEXT                    -- English name for reference
-);
-
--- Filtered view: products safe for meal planning (safety filters only)
+-- Filtered view: products safe for meal planning
 -- Excludes: nightshade, milk protein, no ingredient data, unavailable, non-food
 CREATE VIEW IF NOT EXISTS filtered_products AS
 SELECT *
 FROM products
 WHERE
-    -- Only food categories relevant to cooking and meal planning
     root_category IN (
         'Vlees, vis en vega',
         'Aardappelen, groente en fruit',
@@ -106,38 +89,19 @@ WHERE
         'Kaas',
         'Groentenconserven'
     )
-
-    -- Fail-safe: must have ingredient data
     AND json_array_length(ingredients) > 0
-
-    -- Hard block: no nightshade
     AND has_nightshade = 0
-
-    -- Hard block: no milk protein (contains melk, lactose, or dairy allergens)
     AND NOT EXISTS (
         SELECT 1 FROM json_each(allergens_contains)
         WHERE lower(value) IN ('melk', 'lactose', 'caseïne', 'wei')
     )
-
     AND is_available = 1
     AND in_assortment = 1
     AND is_medicine = 0
     AND retail_set = 0;
 
--- Meal-safe view: filtered_products + bio/Clean 15 filter for fresh produce
--- For 'Aardappelen, groente en fruit': only bio or Clean 15 conventional
--- All other food categories: no bio requirement (applies to meat, fish, grains, etc.)
-CREATE VIEW IF NOT EXISTS meal_safe_products AS
-SELECT *
-FROM filtered_products
-WHERE
-    root_category != 'Aardappelen, groente en fruit'
-    OR is_bio = 1
-    OR is_clean_15 = 1;
-
 CREATE INDEX IF NOT EXISTS idx_products_root_category ON products(root_category);
 CREATE INDEX IF NOT EXISTS idx_products_is_bio ON products(is_bio);
 CREATE INDEX IF NOT EXISTS idx_products_is_available ON products(is_available);
 CREATE INDEX IF NOT EXISTS idx_products_has_nightshade ON products(has_nightshade);
-CREATE INDEX IF NOT EXISTS idx_products_is_clean_15 ON products(is_clean_15);
 CREATE INDEX IF NOT EXISTS idx_products_last_updated ON products(last_updated);

@@ -1,0 +1,12 @@
+[project]
+name = "meridian"
+version = "0.1.0"
+description = "Jumbo Meal Planner, personal AI-assisted weekly meal planning system"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
